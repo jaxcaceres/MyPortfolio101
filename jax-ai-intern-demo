@@ -1,1 +1,76 @@
+import streamlit as st
+from openai import OpenAI
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+st.set_page_config(page_title="OVO Demo – Creator Outreach Drafter", layout="centered")
+st.title("Creator Outreach Email Drafter")
+st.caption("Simple AI tool demo for OVO Talent – Jax Searles")
+
+# --- Inputs ---
+brand_brief = st.text_area(
+    "Brand Brief (what the brand wants)",
+    height=100,
+    placeholder="Example: Clean beauty brand launching a new vitamin C serum. Looking for lifestyle & skincare creators with 20k–80k followers who post authentic routines."
+)
+
+creator_info = st.text_area(
+    "Creator Info / Bio snippet",
+    height=100,
+    placeholder="Example: Maya, 28, posts daily skincare routines and morning vlogs. 45k followers. Recent posts about barrier repair and clean ingredients. Lives in Austin."
+)
+
+if st.button("Draft Email", type="primary"):
+    if not brand_brief or not creator_info:
+        st.warning("Please fill in both fields.")
+    else:
+        with st.spinner("Calling the model..."):
+            # Main drafting prompt
+            prompt = f"""You are an expert at writing short, personalized creator outreach emails for a creator marketing agency.
+
+Brand brief:
+{brand_brief}
+
+Creator info:
+{creator_info}
+
+Write a cold outreach email from the agency to this creator.
+Rules:
+- Under 140 words
+- Friendly and specific (reference something concrete from their content)
+- Clear but soft call-to-action
+- No heavy sales language
+- Sign off as "Alex from OVO Talent"
+"""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",          # cheap + fast
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+            )
+            email = response.choices[0].message.content.strip()
+
+            # Simple quality / measurement check
+            word_count = len(email.split())
+            is_too_long = word_count > 160
+            has_cta = any(word in email.lower() for word in ["interested", "chat", "call", "reply", "thoughts"])
+
+            st.subheader("Generated Email")
+            st.write(email)
+
+            st.subheader("Quick Quality Check")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Word count", word_count)
+            col2.metric("Under 160 words?", "Yes" if not is_too_long else "No – too long")
+            col3.metric("Has soft CTA?", "Yes" if has_cta else "Missing")
+
+            if is_too_long:
+                st.warning("Flag: Email is longer than preferred. In production I would re-prompt or truncate.")
+            if not has_cta:
+                st.warning("Flag: No clear soft call-to-action detected.")
+
+            st.divider()
+            st.markdown("**What I would measure in production:** acceptance rate by the team, edit distance from the draft, reply rate from creators, and % of emails that needed a second LLM pass.")
